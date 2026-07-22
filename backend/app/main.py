@@ -5,11 +5,13 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .analyzer_runtime import DETECTOR, analyze_image_bytes, analyze_video_bytes
 
@@ -18,9 +20,18 @@ MAX_VIDEO_MB = int(os.getenv("MAX_VIDEO_MB", "150"))
 ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "1")))
 CORS_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
     if origin.strip()
 ]
+STATIC_DIR = Path(
+    os.getenv(
+        "STATIC_DIR",
+        str(Path(__file__).resolve().parents[2] / "dist"),
+    )
+).resolve()
 analysis_slots = asyncio.Semaphore(ANALYSIS_CONCURRENCY)
 
 IMAGE_MIME_PREFIX = "image/"
@@ -34,7 +45,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="VeriSight Media Forensics API",
-    version="2.1.0",
+    version="2.2.0",
     description="Probabilistic AI-image, deepfake-video and editing-forensics screening.",
     lifespan=lifespan,
 )
@@ -53,14 +64,19 @@ app.add_middleware(
 async def security_and_timing(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     started = time.perf_counter()
-    try:
-        response = await call_next(request)
-    except Exception:
-        raise
+    response = await call_next(request)
+
+    path = request.url.path
+    if path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    elif path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
+
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time-Ms"] = str(int((time.perf_counter() - started) * 1000))
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    response.headers["Pragma"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -89,11 +105,11 @@ def validate_mime(upload: UploadFile, prefix: str, label: str) -> None:
         raise HTTPException(status_code=415, detail=f"The uploaded file is not a supported {label}.")
 
 
-@app.get("/")
-async def root():
+@app.get("/api")
+async def api_root():
     return {
         "name": "VeriSight Media Forensics API",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "docs": "/docs",
         "health": "/api/health",
         "notice": "Probabilistic screening is not proof.",
@@ -104,8 +120,9 @@ async def root():
 async def health():
     return {
         "ok": True,
-        "version": "2.1.0",
+        "version": "2.2.0",
         "model": DETECTOR.info(),
+        "frontend": (STATIC_DIR / "index.html").is_file(),
         "limits": {
             "image_mb": MAX_IMAGE_MB,
             "video_mb": MAX_VIDEO_MB,
@@ -146,3 +163,33 @@ async def analyze_video(file: UploadFile = File(...)):
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Video analysis failed: {type(exc).__name__}") from exc
+
+
+assets_dir = STATIC_DIR / "assets"
+if assets_dir.is_dir():
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def frontend(full_path: str):
+    """Serve Vite's production build while preserving all /api and /docs routes."""
+    if full_path.startswith(("api/", "docs", "openapi.json", "redoc")):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if STATIC_DIR.is_dir() and full_path:
+        candidate = (STATIC_DIR / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(STATIC_DIR):
+            return FileResponse(candidate)
+
+    index_file = STATIC_DIR / "index.html"
+    if index_file.is_file():
+        return FileResponse(index_file)
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "The frontend build is unavailable.",
+            "api": "/api",
+            "health": "/api/health",
+        },
+    )
