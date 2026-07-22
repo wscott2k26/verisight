@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from .analyzer import DETECTOR, analyze_image_bytes, analyze_video_bytes
+from .analyzer_runtime import DETECTOR, analyze_image_bytes, analyze_video_bytes
 
 MAX_IMAGE_MB = int(os.getenv("MAX_IMAGE_MB", "25"))
 MAX_VIDEO_MB = int(os.getenv("MAX_VIDEO_MB", "150"))
