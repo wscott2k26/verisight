@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: verisight-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: ENABLE_ML
+        value: "true"
+      - key: DETECTOR_MODEL
+        value: prithivMLmods/deepfake-detector-model-v1
+      - key: MAX_IMAGE_MB
+        value: "25"
+      - key: MAX_VIDEO_MB
+        value: "150"
+      - key: MAX_VIDEO_FRAMES
+        value: "14"
+      - key: VIDEO_SAMPLE_SECONDS
+        value: "2.5"
+      - key: MAX_ANALYSIS_DIM
+        value: "1280"
+      - key: MAX_VIDEO_ANALYSIS_DIM
+        value: "900"
+      - key: MODEL_VIDEO_FRAMES
+        value: "6"
+      - key: ANALYSIS_CONCURRENCY
+        value: "1"
+      - key: CORS_ORIGINS
+        sync: false
+    disk:
+      name: huggingface-cache
+      mountPath: /root/.cache/huggingface
+      sizeGB: 5
