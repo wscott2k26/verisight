@@ -1,0 +1,60 @@
+name: VeriSight CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --registry=https://registry.npmjs.org/
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      ENABLE_ML: "false"
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m compileall backend
+      - run: pip install -r backend/requirements-lite.txt
+      - name: Run backend smoke tests
+        run: |
+          python - <<'PY'
+          import io
+          import numpy as np
+          from PIL import Image
+          from fastapi.testclient import TestClient
+          from app.main import app
+
+          client = TestClient(app)
+          health = client.get('/api/health')
+          assert health.status_code == 200
+          assert health.json()['ok'] is True
+
+          gradient = np.zeros((256, 256, 3), dtype=np.uint8)
+          gradient[:, :, 0] = np.arange(256, dtype=np.uint8)[None, :]
+          gradient[:, :, 1] = np.arange(256, dtype=np.uint8)[:, None]
+          gradient[:, :, 2] = 120
+          image = Image.fromarray(gradient)
+          buffer = io.BytesIO()
+          image.save(buffer, format='PNG')
+          response = client.post('/api/analyze/image', files={'file': ('gradient.png', buffer.getvalue(), 'image/png')})
+          assert response.status_code == 200, response.text
+          payload = response.json()
+          assert 0 <= payload['authenticity_score'] <= 100
+          assert payload['evidence_image'].startswith('data:image/jpeg;base64,')
+          assert payload['signals']
+          print('Backend smoke test passed:', payload['verdict'])
+          PY
