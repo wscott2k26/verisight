@@ -57,3 +57,32 @@ jobs:
           assert payload['signals']
           print('Backend smoke test passed:', payload['verdict'])
           PY
+
+  production-container:
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build lightweight production image
+        run: docker build --build-arg REQUIREMENTS_FILE=requirements-lite.txt -t verisight:ci .
+      - name: Start full-stack container
+        run: docker run -d --name verisight-ci -p 10000:10000 -e ENABLE_ML=false verisight:ci
+      - name: Verify website and API share one origin
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:10000/api/health > /tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+          python - <<'PY'
+          import json
+          payload = json.load(open('/tmp/health.json', encoding='utf-8'))
+          assert payload['ok'] is True
+          assert payload['frontend'] is True
+          print('Container health passed:', payload)
+          PY
+          curl -fsS http://127.0.0.1:10000/ | grep -q '<div id="root"></div>'
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs verisight-ci
