@@ -2,7 +2,7 @@
 FROM node:22-alpine AS frontend
 WORKDIR /frontend
 
-COPY package.json package-lock.json ./
+COPY package.json ./
 RUN npm install --registry=https://registry.npmjs.org/
 
 COPY index.html vite.config.js postcss.config.js tailwind.config.js ./
