@@ -1,16 +1,25 @@
 services:
   - type: web
-    name: verisight-api
+    name: verisight
     runtime: docker
-    rootDir: backend
+    plan: standard
+    region: virginia
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeployTrigger: checksPass
+    renderSubdomainPolicy: enabled
+    numInstances: 1
     envVars:
       - key: ENABLE_ML
         value: "true"
       - key: DETECTOR_MODEL
         value: prithivMLmods/deepfake-detector-model-v1
+      - key: MODEL_LOCAL_FILES_ONLY
+        value: "false"
+      - key: HF_HOME
+        value: /var/data/huggingface
+      - key: STATIC_DIR
+        value: /app/dist
       - key: MAX_IMAGE_MB
         value: "25"
       - key: MAX_VIDEO_MB
@@ -28,8 +37,8 @@ services:
       - key: ANALYSIS_CONCURRENCY
         value: "1"
       - key: CORS_ORIGINS
-        sync: false
+        value: http://localhost:5173,http://127.0.0.1:5173
     disk:
       name: huggingface-cache
-      mountPath: /root/.cache/huggingface
+      mountPath: /var/data
       sizeGB: 5
