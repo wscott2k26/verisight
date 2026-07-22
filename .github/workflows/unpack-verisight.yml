@@ -1,0 +1,38 @@
+name: Install VeriSight source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".verisight-upload/READY"
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Rebuild and unpack VeriSight
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .verisight-upload/part-* > /tmp/verisight.zip.b64
+          base64 --decode /tmp/verisight.zip.b64 > /tmp/verisight.zip
+          mkdir -p /tmp/verisight-unpacked
+          unzip -q /tmp/verisight.zip -d /tmp/verisight-unpacked
+          cp -a /tmp/verisight-unpacked/verisight/. .
+          rm -rf .verisight-upload
+          rm -f .github/workflows/unpack-verisight.yml
+
+      - name: Commit installed source
+        shell: bash
+        run: |
+          git config user.name "VeriSight Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Install VeriSight 2.1 full-stack source" || exit 0
+          git push
