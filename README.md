@@ -12,14 +12,16 @@ The Render Blueprint creates one full-stack service. The premium Vite website an
 
 ### Hosting requirement
 
-The included neural classifier uses PyTorch and needs more memory than a 512 MB free instance can reliably provide. `render.yaml` therefore requests a paid 2 GB Standard service and a 5 GB persistent model cache. Render displays the price and complete resource plan before you approve the deployment.
+The default Blueprint is intentionally cost-first: it uses Render's free service with `ENABLE_ML=false` and the lightweight forensic dependencies from `backend/requirements-lite.txt`. This preserves the real file-dependent forensic engine while avoiding the PyTorch/Transformers memory footprint.
 
-After approval:
+If a future paid neural-model deployment is needed, switch the container to `requirements.txt`, enable ML explicitly, and size the service only after representative memory/load testing.
+
+After deployment:
 
 - Render builds the premium frontend.
-- Render builds the CPU-only detector container.
+- Render builds the lightweight CPU forensic container.
 - The app receives an HTTPS `onrender.com` address.
-- The model downloads on the first neural scan and stays in the persistent cache.
+- Inactive free services may cold-start after idle periods.
 - Future commits deploy automatically only after GitHub checks pass.
 
 ## Included
@@ -34,7 +36,7 @@ After approval:
 - Browser-only scan history
 - Temporary video cleanup and `no-store` API responses
 - Single-origin production container
-- Render Blueprint with health checks and persistent model cache
+- Render Blueprint with health checks and a lightweight cost-first runtime
 - Optional Vercel configuration for a separately hosted frontend
 - GitHub Actions frontend, backend and production-container verification
 

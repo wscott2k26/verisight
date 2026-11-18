@@ -2,7 +2,7 @@ services:
   - type: web
     name: verisight
     runtime: docker
-    plan: starter
+    plan: free
     region: virginia
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
